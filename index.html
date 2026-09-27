@@ -7,162 +7,116 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background: #111; color: #fff; }
+        #map { width: 100vw; height: 100vh; background: #111; }
         #controls {
             position: absolute; top: 10px; left: 10px; z-index: 1000;
-            background: rgba(20, 20, 20, 0.85); padding: 12px; border-radius: 8px;
-            border: 1px solid #444; backdrop-filter: blur(5px);
+            background: rgba(0,0,0,0.8); padding: 12px; border-radius: 8px;
+            border: 1px solid #444; backdrop-filter: blur(5px); max-width: 280px;
         }
-        #map { width: 100vw; height: 100vh; background: #0a0a0a; }
         button {
-            background: #8b0000; color: white; border: none; padding: 6px 12px;
-            border-radius: 4px; cursor: pointer; margin-top: 5px;
+            background: #4A90E2; color: white; border: none; padding: 6px 12px;
+            border-radius: 4px; cursor: pointer; margin-top: 8px; width: 100%;
         }
-        button:hover { background: #a00000; }
-        input[type="file"] { margin-bottom: 8px; display: block; }
+        button:hover { background: #357ABD; }
+        .hidden { display: none; }
+        .status-text { font-size: 12px; color: #aaa; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-    <div id="controls">
-        <div id="status"><b>Карта Мира</b></div>
-        <hr style="border-color: #444;">
-        <label>Загрузить изображение:</label>
-        <input type="file" id="imageLoader" accept="image/*">
-        <button id="backBtn" style="display:none;" onclick="loadWorldMap()">← Назад к карте мира</button>
-    </div>
+<div id="controls">
+    <h3 id="map-title" style="margin-top:0; margin-bottom:8px;">Карта Мира</h3>
+    <div id="status" class="status-text">Загрузка карты мира...</div>
+    <button id="back-button" class="hidden" onclick="loadMap('world')">← Вернуться на Карту Мира</button>
+</div>
 
-    <div id="map"></div>
+<div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        const map = L.map('map', { crs: L.CRS.Simple, minZoom: -3 });
-        let currentOverlay = null;
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const map = L.map('map', {
+        crs: L.CRS.Simple,
+        minZoom: -2,
+        maxZoom: 2
+    });
 
-        // Хранилище данных о картах в памяти
-        let worldData = {
-            imageUrl: null,
-            markers: [] // { latlng, name, cityImageUrl, cityMarkers: [] }
-        };
+    let currentLayer = null;
+    let markers = [];
 
-        let currentLevel = 'world'; // 'world' или 'city'
-        let activeCityIndex = null;
+    // База данных карт и меток
+    const mapsData = {
+        'world': {
+            title: 'Карта Мира',
+            imageUrl: 'world.jpg', // Файл картинки карты мира в репозитории
+            cities: [
+                { id: 'capital', name: 'Столица', coords: [500, 800], cityMap: 'city_capital.jpg' }
+                // Сюда можно добавлять другие города
+            ]
+        }
+    };
 
-        // Загрузка фото для текущего уровня
-        document.getElementById('imageLoader').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+    function clearMarkers() {
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+    }
 
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const imgUrl = event.target.result;
-                if (currentLevel === 'world') {
-                    worldData.imageUrl = imgUrl;
-                    renderMap(imgUrl);
-                } else if (currentLevel === 'city' && activeCityIndex !== null) {
-                    worldData.markers[activeCityIndex].cityImageUrl = imgUrl;
-                    renderMap(imgUrl);
-                }
-            };
-            reader.readAsDataURL(file);
-        });
+    function loadMap(mapKeyOrUrl, title = 'Карта', isCity = false) {
+        clearMarkers();
+        const statusEl = document.getElementById('status');
+        const backBtn = document.getElementById('back-button');
+        const titleEl = document.getElementById('map-title');
 
-        function renderMap(url) {
-            if (currentOverlay) map.removeLayer(currentOverlay);
+        statusEl.innerText = 'Загрузка изображения...';
+        titleEl.innerText = title;
 
-            const img = new Image();
-            img.onload = function() {
-                const bounds = [[0, 0], [img.height, img.width]];
-                currentOverlay = L.imageOverlay(url, bounds).addTo(map);
-                map.fitBounds(bounds);
-            };
-            img.src = url;
+        let imageUrl = mapKeyOrUrl;
+        let mapConfig = null;
+
+        if (mapsData[mapKeyOrUrl]) {
+            mapConfig = mapsData[mapKeyOrUrl];
+            imageUrl = mapConfig.imageUrl;
+            titleEl.innerText = mapConfig.title;
         }
 
-        // Клик по карте для создания метки
-        map.on('click', function(e) {
-            if (currentLevel === 'world') {
-                if (!worldData.imageUrl) {
-                    alert("Сначала загрузите карту мира!");
-                    return;
-                }
-                const cityName = prompt("Введите название города/локации:");
-                if (cityName) {
-                    const cityObj = {
-                        latlng: e.latlng,
-                        name: cityName,
-                        cityImageUrl: null,
-                        cityMarkers: []
-                    };
-                    const index = worldData.markers.length;
-                    worldData.markers.push(cityObj);
-                    addWorldMarker(cityObj, index);
-                }
-            } else if (currentLevel === 'city') {
-                const placeName = prompt("Введите название объекта (например, Таверна):");
-                if (placeName) {
-                    const marker = L.marker(e.latlng).addTo(map);
-                    marker.bindPopup(`<b>${placeName}</b>`).openPopup();
-                    worldData.markers[activeCityIndex].cityMarkers.push({ latlng: e.latlng, name: placeName });
-                }
+        const img = new Image();
+        img.src = imageUrl;
+
+        img.onload = function() {
+            const w = this.width;
+            const h = this.height;
+            const bounds = [[0, 0], [h, w]];
+
+            if (currentLayer) {
+                map.removeLayer(currentLayer);
             }
-        });
 
-        function addWorldMarker(cityObj, index) {
-            const marker = L.marker(cityObj.latlng).addTo(map);
-            const popupContent = `
-                <b>${cityObj.name}</b><br>
-                <button onclick="enterCity(${index})">Войти в город ➔</button>
-            `;
-            marker.bindPopup(popupContent);
-        }
+            currentLayer = L.imageOverlay(imageUrl, bounds).addTo(map);
+            map.fitBounds(bounds);
+            statusEl.innerText = '';
 
-        // Переход на карту города
-        window.enterCity = function(index) {
-            currentLevel = 'city';
-            activeCityIndex = index;
-            const city = worldData.markers[index];
-
-            document.getElementById('status').innerHTML = `<b>Город: ${city.name}</b>`;
-            document.getElementById('backBtn').style.display = 'block';
-
-            // Очищаем текущие метки с экрана
-            map.eachLayer((layer) => {
-                if (layer instanceof L.Marker) map.removeLayer(layer);
-            });
-
-            if (city.cityImageUrl) {
-                renderMap(city.cityImageUrl);
-                // Отрисовываем метки внутри города
-                city.cityMarkers.forEach(m => {
-                    L.marker(m.latlng).addTo(map).bindPopup(`<b>${m.name}</b>`);
+            // Если это карта мира, создаем метки городов
+            if (mapConfig && mapConfig.cities) {
+                mapConfig.cities.forEach(city => {
+                    const marker = L.marker(city.coords).addTo(map);
+                    marker.bindPopup(`<b>${city.name}</b><br><button onclick="loadMap('${city.cityMap}', '${city.name}', true)">Перейти в город</button>`);
+                    markers.push(marker);
                 });
+            }
+
+            if (isCity) {
+                backBtn.classList.remove('hidden');
             } else {
-                if (currentOverlay) map.removeLayer(currentOverlay);
-                alert("Карта для этого города еще не загружена. Загрузите файл карты через меню слева.");
+                backBtn.classList.add('hidden');
             }
         };
 
-        // Возврат на карту мира
-        window.loadWorldMap = function() {
-            currentLevel = 'world';
-            activeCityIndex = null;
-
-            document.getElementById('status').innerHTML = `<b>Карта Мира</b>`;
-            document.getElementById('backBtn').style.display = 'none';
-
-            // Очищаем метки города
-            map.eachLayer((layer) => {
-                if (layer instanceof L.Marker) map.removeLayer(layer);
-            });
-
-            if (worldData.imageUrl) {
-                renderMap(worldData.imageUrl);
-                // Отрисовываем метки городов на карте мира
-                worldData.markers.forEach((cityObj, index) => {
-                    addWorldMarker(cityObj, index);
-                });
-            }
+        img.onerror = function() {
+            statusEl.innerText = 'Ошибка: файл ' + imageUrl + ' не найден в репозитории.';
         };
-    </script>
+    }
+
+    // Запуск карты мира по умолчанию
+    loadMap('world');
+</script>
 </body>
 </html>
