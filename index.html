@@ -2,129 +2,105 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Interactive Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Интерактивная карта D&D</title>
+  
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
   <style>
-    body { margin: 0; padding: 0; font-family: sans-serif; background: #111; color: #fff; }
-    #map { width: 100vw; height: 100vh; background: #111; }
-    #controls {
-      position: absolute; top: 10px; left: 10px; z-index: 1000;
-      background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;
-      border: 1px solid #444; backdrop-filter: blur(5px); min-width: 200px;
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #121212;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
     }
-    button {
-      background: #440002; color: white; border: none; padding: 5px 12px;
-      border-radius: 4px; cursor: pointer; margin-top: 5px; width: 100%;
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+      background-color: #121212;
     }
-    button:hover { background: #570d03; }
-    .status-text { font-size: 12px; color: #aaa; margin-top: 5px; }
-    .hidden { display: none; }
+
+    /* Панель управления над картой */
+    .controls {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      z-index: 1000;
+      background: rgba(20, 20, 20, 0.85);
+      padding: 10px 15px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+
+    .btn-city {
+      background-color: #8b0000;
+      color: #ffffff;
+      border: 1px solid #ff4500;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.2s ease, transform 0.1s ease;
+    }
+
+    .btn-city:hover {
+      background-color: #a00000;
+      transform: scale(1.03);
+    }
+
+    .btn-city:active {
+      transform: scale(0.97);
+    }
   </style>
 </head>
 <body>
 
-<div id="controls">
-  <h2 id="map-title" style="margin-top:0; margin-bottom: 5px;">Карта Мира</h2>
-  <div id="status" class="status-text">Загрузка карты мира...</div>
-  <button id="back-button" class="hidden" onclick="loadWorldMap()">← Вернуться на Карту Мира</button>
-</div>
+  <!-- Кнопка перехода к городу -->
+  <div class="controls">
+    <button class="btn-city" onclick="goToCity()">Перейти к городу</button>
+  </div>
 
-<div id="map"></div>
+  <!-- Контейнер карты -->
+  <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-  const map = L.map('map', {
-    crs: L.CRS.Simple,
-    minZoom: -2,
-    maxZoom: 2,
-  });
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  let currentLayer = null;
-  let markers = [];
+  <script>
+    // Размеры изображения карты (в пикселях)
+    const imageWidth = 2000;
+    const imageHeight = 1500;
+    const bounds = [[0, 0], [imageHeight, imageWidth]];
 
-  // Данные карт и меток
-  const mapData = {
-    world: {
-      title: "Карта Мира",
-      // Используем относительный путь ./world.jpg
-      imageUrl: "./world.jpg", 
-      bounds: [[0, 0], [1000, 1000]],
-      markers: [
-        {
-          coords: [400, 800],
-          title: "Столица",
-          onClick: () => loadSubMap('city', 'Столица')
-        }
-      ]
-    },
-    city: {
-      title: "Карта Города",
-      imageUrl: "./city_capital.jpg",
-      bounds: [[0, 0], [800, 800]],
-      markers: []
+    // Инициализация карты в простых координатах (Simple CRS)
+    const map = L.map('map', {
+      crs: L.CRS.Simple,
+      minZoom: -1,
+      maxZoom: 3,
+      zoomSnap: 0.5
+    });
+
+    // Добавление карты
+    const image = L.imageOverlay('./teesrosshrar_shore.png', bounds).addTo(map);
+
+    // Центрирование карты при загрузке
+    map.fitBounds(bounds);
+
+    // Функция быстрый переход к городу (координаты можно скорректировать)
+    function goToCity() {
+      // Переход к условным координатам центра города
+      map.flyTo([750, 1000], 1.5, {
+        duration: 1.5
+      });
     }
-  };
-
-  function clearMap() {
-    if (currentLayer) {
-      map.removeLayer(currentLayer);
-    }
-    markers.forEach(marker => map.removeLayer(marker));
-    markers = [];
-  }
-
-  function loadMap(mapConfig) {
-    clearMap();
-
-    document.getElementById('map-title').innerText = mapConfig.title;
-
-    const img = new Image();
-    img.src = mapConfig.imageUrl;
-
-    img.onload = function() {
-      const w = this.width;
-      const h = this.height;
-
-      const bounds = [[0, 0], [h, w]];
-
-      currentLayer = L.imageOverlay(mapConfig.imageUrl, bounds).addTo(map);
-      map.fitBounds(bounds);
-
-      if (mapConfig.markers) {
-        mapConfig.markers.forEach(m => {
-          const marker = L.marker(m.coords).addTo(map);
-          marker.bindPopup(m.title);
-          if (m.onClick) {
-            marker.on('click', m.onClick);
-          }
-          markers.push(marker);
-        });
-      }
-
-      document.getElementById('status').innerText = "";
-    };
-
-    img.onerror = function() {
-      document.getElementById('status').innerText = "Ошибка: Файл " + mapConfig.imageUrl + " не найден в репозитории.";
-    };
-  }
-
-  function loadWorldMap() {
-    document.getElementById('back-button').classList.add('hidden');
-    loadMap(mapData.world);
-  }
-
-  function loadSubMap(key, name) {
-    if (mapData[key]) {
-      document.getElementById('back-button').classList.remove('hidden');
-      loadMap(mapData[key]);
-    }
-  }
-
-  // Запуск при загрузке
-  loadWorldMap();
-</script>
+  </script>
 
 </body>
 </html>
